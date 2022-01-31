@@ -1,0 +1,14 @@
+name: AsyncFunctionReload
+version: '${version}'
+main: com.gmail.necnionch.myplugin.asyncfunctionreload.bukkit.AsyncFunctionReload
+api-version: 1.15
+authors: [ Necnion8 ]
+
+commands:
+  functionsreload:
+    aliases: [frl]
+    permission: asyncfunctionreload.command.functionsreload
+
+permissions:
+  asyncfunctionreload.command.functionsreload:
+    default: op
