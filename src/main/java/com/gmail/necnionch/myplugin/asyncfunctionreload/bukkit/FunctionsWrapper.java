@@ -145,8 +145,6 @@ public class FunctionsWrapper {
             if (count > 0)
                 owner.getLogger().info("Loaded " + count + " custom command functions");
 
-//            this.k.a(this.k.a(resourceManager, this.server.aX()).join());
-
             // main-thread
             owner.getServer().getScheduler().runTask(owner, () -> {
                 this.g.clear();
@@ -155,6 +153,11 @@ public class FunctionsWrapper {
                 this.g.putAll(functions.stream()
                         .filter(Objects::nonNull)
                         .collect(Collectors.toMap(CustomFunction::a, f -> f)));
+
+                // 2,3回実行しないとなぜか tags/function が読み込まれなかったのでメインスレッドで実行
+                Map<MinecraftKey, Tag.a<CustomFunction>> tags = k.a(resourceManager, this.server.aX()).join();
+                this.k.a(tags);
+
                 this.l.addAll(this.k.b(d).a());
 
                 try {
@@ -204,8 +207,6 @@ public class FunctionsWrapper {
             if (count > 0)
                 owner.getLogger().info("Loaded " + count + " custom command functions");
 
-//            this.k.a(this.k.a(resourceManager, this.server.aX()).join());
-
             // main-thread
             owner.getServer().getScheduler().runTask(owner, () -> {
                 this.g.keySet().removeIf(k -> k.getNamespace().equalsIgnoreCase(namespace));
@@ -214,6 +215,11 @@ public class FunctionsWrapper {
                 this.g.putAll(functions.stream()
                         .filter(Objects::nonNull)
                         .collect(Collectors.toMap(CustomFunction::a, f -> f)));
+
+                // 2,3回実行しないとなぜか tags/function が読み込まれなかったのでメインスレッドで実行
+                Map<MinecraftKey, Tag.a<CustomFunction>> tags = k.a(resourceManager, this.server.aX()).join();
+                this.k.a(tags);
+
                 this.l.addAll(this.k.b(d).a());
 
                 try {
