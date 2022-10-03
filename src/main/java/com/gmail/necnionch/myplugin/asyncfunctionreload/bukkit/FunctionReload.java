@@ -1,7 +1,7 @@
 package com.gmail.necnionch.myplugin.asyncfunctionreload.bukkit;
 
 import com.google.common.collect.Lists;
-import net.minecraft.server.v1_15_R1.MinecraftKey;
+import net.minecraft.resources.MinecraftKey;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;

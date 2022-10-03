@@ -1,244 +1,173 @@
 package com.gmail.necnionch.myplugin.asyncfunctionreload.bukkit;
 
-import com.google.common.collect.Lists;
-import net.minecraft.server.v1_15_R1.*;
-import org.bukkit.craftbukkit.libs.org.apache.commons.io.IOUtils;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.datafixers.util.Pair;
+import net.minecraft.commands.CommandListenerWrapper;
+import net.minecraft.commands.CustomFunction;
+import net.minecraft.commands.ICommandListener;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.resources.MinecraftKey;
+import net.minecraft.server.CustomFunctionManager;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.packs.resources.IResource;
+import net.minecraft.server.packs.resources.IResourceManager;
+import net.minecraft.tags.TagDataPack;
+import net.minecraft.world.phys.Vec2F;
+import net.minecraft.world.phys.Vec3D;
+import org.bukkit.Server;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.lang.reflect.Method;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.function.Consumer;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 public class FunctionsWrapper {
 
+    private static final int c = "functions/".length();
+    private static final int d = ".mcfunction".length();
     private final IResourceManager resourceManager;
-    private final MinecraftServer server;
-    private final net.minecraft.server.v1_15_R1.CustomFunctionData functionData;
-    private final Map<MinecraftKey, CustomFunction> g;
-    private final List<CustomFunction> l;
-    private final Field m;
-    private final MinecraftKey d;
-    private final MinecraftKey e;
-    private final Tags<CustomFunction> k;
-    private final AsyncFunctionReload owner;
-
-    public FunctionsWrapper(AsyncFunctionReload owner, MinecraftServer server, IResourceManager resourceManager) throws IllegalAccessException {
-        this.owner = owner;
-        this.server = server;
-        this.resourceManager = resourceManager;
-        functionData = server.getFunctionData();
-
-        Class<net.minecraft.server.v1_15_R1.CustomFunctionData> clazz = net.minecraft.server.v1_15_R1.CustomFunctionData.class;
-
-        try {
-            Field field = clazz.getDeclaredField("g");
-            field.setAccessible(true);
-            //noinspection unchecked
-            g = (Map<MinecraftKey, CustomFunction>) field.get(functionData);
-        } catch (ReflectiveOperationException e) {
-            IllegalAccessException e2 = new IllegalAccessException("reflection failed");
-            e2.addSuppressed(e);
-            throw e2;
-        }
-
-        try {
-            Field field = clazz.getDeclaredField("l");
-            field.setAccessible(true);
-            //noinspection unchecked
-            l = ((List<CustomFunction>) field.get(functionData));
-        } catch (ReflectiveOperationException e) {
-            IllegalAccessException e2 = new IllegalAccessException("reflection failed");
-            e2.addSuppressed(e);
-            throw e2;
-        }
-
-        try {
-            m = clazz.getDeclaredField("m");
-            m.setAccessible(true);
-        } catch (ReflectiveOperationException e) {
-            IllegalAccessException e2 = new IllegalAccessException("reflection failed");
-            e2.addSuppressed(e);
-            throw e2;
-        }
-
-        try {
-            Field field = clazz.getDeclaredField("d");
-            field.setAccessible(true);
-            d = ((MinecraftKey) field.get(null));
-        } catch (ReflectiveOperationException e) {
-            IllegalAccessException e2 = new IllegalAccessException("reflection failed");
-            e2.addSuppressed(e);
-            throw e2;
-        }
-
-        try {
-            Field field = clazz.getDeclaredField("e");
-            field.setAccessible(true);
-            e = ((MinecraftKey) field.get(null));
-        } catch (ReflectiveOperationException e) {
-            IllegalAccessException e2 = new IllegalAccessException("reflection failed");
-            e2.addSuppressed(e);
-            throw e2;
-        }
-
-        try {
-            Field field = clazz.getDeclaredField("k");
-            field.setAccessible(true);
-            //noinspection unchecked
-            k = ((Tags<CustomFunction>) field.get(functionData));
-        } catch (ReflectiveOperationException e) {
-            IllegalAccessException e2 = new IllegalAccessException("reflection failed");
-            e2.addSuppressed(e);
-            throw e2;
-        }
+    private final Executor asyncExecutor;
+    private final Executor syncExecutor;
+    private final CustomFunctionManager inst;
+    private final int h;
+    private final CommandDispatcher<CommandListenerWrapper> i;
+    private final Field e;  // Map<MinecraftKey, CustomFunction>
+    private final TagDataPack<CustomFunction> f;
+    private final Field g;  // Map<MinecraftKey, Collection<CustomFunction>>
 
 
+    @SuppressWarnings("unchecked")
+    public FunctionsWrapper(AsyncFunctionReload owner, MinecraftServer server) throws ReflectiveOperationException {
+        this.resourceManager = server.aZ();
+        this.inst = server.at.b().a();
+        Class<CustomFunctionManager> clazz = CustomFunctionManager.class;
 
+        Field field = clazz.getDeclaredField("h");
+        field.setAccessible(true);
+        h = ((int) field.get(inst));
 
+        field = clazz.getDeclaredField("i");
+        field.setAccessible(true);
+        i = ((CommandDispatcher<CommandListenerWrapper>) field.get(inst));
+
+        e = clazz.getDeclaredField("e");
+        e.setAccessible(true);
+
+        field = clazz.getDeclaredField("f");
+        field.setAccessible(true);
+        f = ((TagDataPack<CustomFunction>) field.get(inst));
+
+        g = clazz.getDeclaredField("g");
+        g.setAccessible(true);
+
+        asyncExecutor = command -> owner.getServer().getScheduler().runTaskAsynchronously(owner, command);
+        syncExecutor = command -> owner.getServer().getScheduler().runTask(owner, command);
     }
 
 
-    private List<String> readLines(IResourceManager resourceManager, MinecraftKey key) {
-        try (IResource resource = resourceManager.a(key)) {
-            return IOUtils.readLines(resource.b(), StandardCharsets.UTF_8);
-
-        } catch (IOException e) {
-            throw new CompletionException(e);
+    public static FunctionsWrapper init(AsyncFunctionReload owner, Server server) {
+        try {
+            Method method = server.getClass().getDeclaredMethod("getServer");
+            MinecraftServer mc = ((MinecraftServer) method.invoke(server));
+            return new FunctionsWrapper(owner, mc);
+        } catch (ReflectiveOperationException e) {
+            IllegalArgumentException e2 = new IllegalArgumentException("reflection failed");
+            e2.addSuppressed(e);
+            throw e2;
         }
-
     }
 
 
-    public void reloadAll(Consumer<FunctionReload.Result> onResult) {
-        // async
-        owner.getServer().getScheduler().runTaskAsynchronously(owner, () -> {
-            FunctionReload reload = new FunctionReload();
+    private static List<String> readLines(IResource var0) {
+        try (BufferedReader br = var0.c()) {
+            return br.lines().toList();
+        } catch (IOException var6) {
+            throw new CompletionException(var6);
+        }
+    }
 
-            Collection<MinecraftKey> functionKeys = resourceManager.a("functions", s -> s.endsWith(".mcfunction"));
-            List<CompletableFuture<CustomFunction>> list = Lists.newArrayList();
-            List<CustomFunction> functions = Lists.newArrayList();
+    public CompletableFuture<FunctionReload.Result> reloadAll() {
+        return a(resourceManager);
+    }
 
-            for (MinecraftKey key : functionKeys) {
-                String keyName = key.getKey();
-                MinecraftKey key2 = new MinecraftKey(key.getNamespace(), keyName.substring("functions/".length(), keyName.length() - ".mcfunction".length()));
+    public CompletableFuture<FunctionReload.Result> a(IResourceManager resourceManager) {
+        FunctionReload result = new FunctionReload();
 
-                list.add(CompletableFuture.supplyAsync(() -> readLines(resourceManager, key), Resource.a)
-                        .thenApplyAsync(list1 -> CustomFunction.a(key2, functionData, list1), this.server.aX())
-                        .handle((function, throwable) -> {
-                            if (throwable != null) {
-                                reload.addFail(key, throwable);
-                                return null;
-                            } else {
-                                reload.counter.incrementAndGet();
-                                functions.add(function);
-                                return function;
-                            }}));
+        CompletableFuture<Map<MinecraftKey, List<net.minecraft.tags.TagDataPack.a>>> first = CompletableFuture.supplyAsync(
+                () -> this.f.a(resourceManager),
+                asyncExecutor
+        );
+
+        CompletableFuture<Map<MinecraftKey, CompletableFuture<CustomFunction>>> second = CompletableFuture.supplyAsync(
+                () -> resourceManager.b("functions", (key) -> key.a().endsWith(".mcfunction")),
+                asyncExecutor
+
+        ).thenCompose((var1x) -> {
+            Map<MinecraftKey, CompletableFuture<CustomFunction>> var2 = Maps.newHashMap();
+            CommandListenerWrapper var3 = new CommandListenerWrapper(ICommandListener.a, Vec3D.b, Vec2F.a, null, this.h, "", CommonComponents.a, null, null);
+
+            for (Map.Entry<MinecraftKey, IResource> var5 : var1x.entrySet()) {
+                MinecraftKey var6_ = var5.getKey();
+                String var7_ = var6_.a();
+                MinecraftKey var8 = new MinecraftKey(var6_.b(), var7_.substring(c, var7_.length() - d));
+                var2.put(var8, CompletableFuture.supplyAsync(() -> {
+                    List<String> var3x = readLines(var5.getValue());
+                    return CustomFunction.a(var8, this.i, var3, var3x);
+                }, asyncExecutor));
             }
 
-            CompletableFuture.allOf(list.toArray(new CompletableFuture[0])).join();
-
-            int count = reload.counter.get();
-            if (count > 0)
-                owner.getLogger().info("Loaded " + count + " custom command functions");
-
-            // main-thread
-            owner.getServer().getScheduler().runTask(owner, () -> {
-                this.g.clear();
-                this.l.clear();
-
-                this.g.putAll(functions.stream()
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toMap(CustomFunction::a, f -> f)));
-
-                // 2,3回実行しないとなぜか tags/function が読み込まれなかったのでメインスレッドで実行
-                Map<MinecraftKey, Tag.a<CustomFunction>> tags = k.a(resourceManager, this.server.aX()).join();
-                this.k.a(tags);
-
-                this.l.addAll(this.k.b(d).a());
-
-                try {
-                    this.m.set(functionData, true);
-                } catch (IllegalAccessException ex) {
-                    ex.printStackTrace();
-                }
-
-                onResult.accept(reload.complete());
-
-            });
+            CompletableFuture<?>[] var4x = (CompletableFuture<?>[])var2.values().toArray(new CompletableFuture[0]);
+            return CompletableFuture.allOf(var4x).handle((var1_, var2x) -> var2);
         });
-    }
 
-    public void reload(Consumer<FunctionReload.Result> onResult, String namespace) {
-        // async
-        owner.getServer().getScheduler().runTaskAsynchronously(owner, () -> {
-            FunctionReload reload = new FunctionReload();
-
-            Collection<MinecraftKey> functionKeys = resourceManager.a("functions", s -> s.endsWith(".mcfunction"));
-            List<CompletableFuture<CustomFunction>> list = Lists.newArrayList();
-            List<CustomFunction> functions = Lists.newArrayList();
-
-            for (MinecraftKey key : functionKeys) {
-                if (!key.getNamespace().equalsIgnoreCase(namespace))
-                    continue;
-
-                String keyName = key.getKey();
-                MinecraftKey key2 = new MinecraftKey(key.getNamespace(), keyName.substring("functions/".length(), keyName.length() - ".mcfunction".length()));
-
-                list.add(CompletableFuture.supplyAsync(() -> readLines(resourceManager, key), Resource.a)
-                        .thenApplyAsync(list1 -> CustomFunction.a(key2, functionData, list1), this.server.aX())
-                        .handle((function, throwable) -> {
-                            if (throwable != null) {
-                                reload.addFail(key, throwable);
-                                return null;
+        return first
+                .thenCombine(second, Pair::of)
+                .thenAcceptAsync((var0x) -> {
+                    Map<MinecraftKey, CompletableFuture<CustomFunction>> var1_ = var0x.getSecond();
+                    ImmutableMap.Builder<MinecraftKey, CustomFunction> var2 = ImmutableMap.builder();
+                    var1_.forEach((key, var2x) -> {
+                        var2x.handle((customFunction, error) -> {
+                            if (error != null) {
+//                                a.error("Failed to load function {}", key, error);
+                                result.addFail(key, error);
                             } else {
-                                reload.counter.incrementAndGet();
-                                functions.add(function);
-                                return function;
-                            }}));
-            }
+                                result.counter.incrementAndGet();
+                                var2.put(key, customFunction);
+                            }
+                            return null;
+                        }).join();
+                    });
 
-            CompletableFuture.allOf(list.toArray(new CompletableFuture[0])).join();
+                    try {
+                        this.e.set(inst, var2.build());
+                        this.g.set(inst, this.f.a(var0x.getFirst()));
+                    } catch (IllegalAccessException e) {
+                        e.printStackTrace();
+                    }
+                }, syncExecutor)
+                .thenApply((v) -> result.complete());
 
-            int count = reload.counter.get();
-            if (count > 0)
-                owner.getLogger().info("Loaded " + count + " custom command functions");
-
-            // main-thread
-            owner.getServer().getScheduler().runTask(owner, () -> {
-                this.g.keySet().removeIf(k -> k.getNamespace().equalsIgnoreCase(namespace));
-                this.l.removeIf(k -> k.getMinecraftKey().getNamespace().equalsIgnoreCase(namespace));
-
-                this.g.putAll(functions.stream()
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toMap(CustomFunction::a, f -> f)));
-
-                // 2,3回実行しないとなぜか tags/function が読み込まれなかったのでメインスレッドで実行
-                Map<MinecraftKey, Tag.a<CustomFunction>> tags = k.a(resourceManager, this.server.aX()).join();
-                this.k.a(tags);
-
-                this.l.addAll(this.k.b(d).a());
-
-                try {
-                    this.m.set(functionData, true);
-                } catch (IllegalAccessException ex) {
-                    ex.printStackTrace();
-                }
-
-                onResult.accept(reload.complete());
-
-            });
-        });
     }
-
 
     public Set<String> getNamespaces() {
-        return g.values().stream()
-                .map(f -> f.a().getNamespace())
-                .collect(Collectors.toSet());
+        try {
+            //noinspection unchecked
+            return ((Map<MinecraftKey, CustomFunction>) e.get(inst)).keySet().stream()
+                    .map(MinecraftKey::b)
+                    .collect(Collectors.toUnmodifiableSet());
+        } catch (IllegalAccessException ex) {
+            return Collections.emptySet();
+        }
     }
 
 

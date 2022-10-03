@@ -5,7 +5,7 @@ import com.gmail.necnionch.myplugin.asyncfunctionreload.bukkit.FunctionsWrapper;
 import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.chat.ComponentBuilder;
 import net.md_5.bungee.api.chat.HoverEvent;
-import net.minecraft.server.v1_15_R1.MinecraftKey;
+import net.minecraft.resources.MinecraftKey;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -13,10 +13,8 @@ import org.bukkit.command.TabCompleter;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 public class ReloadCommand implements CommandExecutor, TabCompleter {
 
@@ -29,24 +27,31 @@ public class ReloadCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
-            functions.reloadAll((result) -> sendResult(sender, result, null));
-        } else {
-            String namespace = args[0].toLowerCase(Locale.ROOT);
-            if (functions.getNamespaces().contains(namespace)) {
-                functions.reload((result) -> sendResult(sender, result, namespace), namespace);
-            } else {
-                sender.sendMessage(ChatColor.RED + "不明なIDです");
-            }
+            functions.reloadAll().whenComplete((result, error) -> {
+                if (error != null) {
+                    error.printStackTrace();
+                    sender.sendMessage(ChatColor.DARK_RED + "Failed to reload functions!");
+                } else {
+                    sendResult(sender, result, null);
+                }
+            });
+//        } else {
+//            String namespace = args[0].toLowerCase(Locale.ROOT);
+//            if (functions.getNamespaces().contains(namespace)) {
+//                functions.reload((result) -> sendResult(sender, result, namespace), namespace);
+//            } else {
+//                sender.sendMessage(ChatColor.RED + "不明なIDです");
+//            }
         }
         return true;
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {
-        if (args.length == 1) {
-            return functions.getNamespaces().stream().filter(n -> n.startsWith(args[0].toLowerCase(Locale.ROOT)))
-                    .collect(Collectors.toList());
-        }
+//        if (args.length == 1) {
+//            return functions.getNamespaces().stream().filter(n -> n.startsWith(args[0].toLowerCase(Locale.ROOT)))
+//                    .collect(Collectors.toList());
+//        }
         return Collections.emptyList();
     }
 
@@ -90,7 +95,6 @@ public class ReloadCommand implements CommandExecutor, TabCompleter {
                     info = " (L" + lineNumber + ")";
                 }
             }
-
             sender.spigot().sendMessage(new ComponentBuilder("- " + key + info)
                     .event(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ComponentBuilder(error.getMessage()).color(ChatColor.RED).create()))
                     .color(ChatColor.RED)
