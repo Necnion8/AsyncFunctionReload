@@ -27,6 +27,8 @@ public class ReloadCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
+            sender.sendMessage(ChatColor.GRAY + "RELOADING!");
+
             functions.reloadAll().whenComplete((result, error) -> {
                 if (error != null) {
                     error.printStackTrace();
@@ -56,8 +58,6 @@ public class ReloadCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendResult(CommandSender sender, FunctionReload.Result result, String namespace) {
-        sender.sendMessage(ChatColor.GRAY + "RELOADING!");
-
         int functions = result.getFunctionCount();
         long time = result.getProcessingTime();
         FunctionReload.Fail[] fails = result.getFails();
