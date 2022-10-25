@@ -9,6 +9,7 @@ import net.minecraft.commands.CustomFunction;
 import net.minecraft.commands.ICommandListener;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.resources.MinecraftKey;
+import net.minecraft.server.CustomFunctionData;
 import net.minecraft.server.CustomFunctionManager;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.packs.resources.IResource;
@@ -35,40 +36,54 @@ public class FunctionsWrapper {
 
     private static final int c = "functions/".length();
     private static final int d = ".mcfunction".length();
-    private final IResourceManager resourceManager;
     private final Executor asyncExecutor;
     private final Executor syncExecutor;
-    private final CustomFunctionManager inst;
-    private final int h;
-    private final CommandDispatcher<CommandListenerWrapper> i;
-    private final Field e;  // Map<MinecraftKey, CustomFunction>
-    private final TagDataPack<CustomFunction> f;
-    private final Field g;  // Map<MinecraftKey, Collection<CustomFunction>>
+    private final MinecraftServer server;
+    private final Field gField;  // Map<MinecraftKey, Collection<CustomFunction>>
+    private final Field hField;
+    private final Field iField;
+    private final Field eField;  // Map<MinecraftKey, CustomFunction>
+    private final Field fField;
 
+    public class Reflections {
+        private final int h;
+        private final CommandDispatcher<CommandListenerWrapper> i;
+        private final TagDataPack<CustomFunction> f;
+        private final CustomFunctionManager customFunctionManager;
+        private final IResourceManager resourceManager;
+        private final CustomFunctionData customFunctionData;
 
-    @SuppressWarnings("unchecked")
+        @SuppressWarnings("unchecked")
+        public Reflections() throws ReflectiveOperationException {
+            this.resourceManager = server.aZ();
+            this.customFunctionManager = server.at.b().a();
+            this.customFunctionData = server.aA();
+
+            h = ((int) hField.get(customFunctionManager));
+            i = ((CommandDispatcher<CommandListenerWrapper>) iField.get(customFunctionManager));
+            f = ((TagDataPack<CustomFunction>) fField.get(customFunctionManager));
+        }
+
+    }
+
     public FunctionsWrapper(AsyncFunctionReload owner, MinecraftServer server) throws ReflectiveOperationException {
-        this.resourceManager = server.aZ();
-        this.inst = server.at.b().a();
+        this.server = server;
         Class<CustomFunctionManager> clazz = CustomFunctionManager.class;
 
-        Field field = clazz.getDeclaredField("h");
-        field.setAccessible(true);
-        h = ((int) field.get(inst));
+        hField = clazz.getDeclaredField("h");
+        hField.setAccessible(true);
 
-        field = clazz.getDeclaredField("i");
-        field.setAccessible(true);
-        i = ((CommandDispatcher<CommandListenerWrapper>) field.get(inst));
+        iField = clazz.getDeclaredField("i");
+        iField.setAccessible(true);
 
-        e = clazz.getDeclaredField("e");
-        e.setAccessible(true);
+        eField = clazz.getDeclaredField("e");
+        eField.setAccessible(true);
 
-        field = clazz.getDeclaredField("f");
-        field.setAccessible(true);
-        f = ((TagDataPack<CustomFunction>) field.get(inst));
+        fField = clazz.getDeclaredField("f");
+        fField.setAccessible(true);
 
-        g = clazz.getDeclaredField("g");
-        g.setAccessible(true);
+        gField = clazz.getDeclaredField("g");
+        gField.setAccessible(true);
 
         asyncExecutor = command -> owner.getServer().getScheduler().runTaskAsynchronously(owner, command);
         syncExecutor = command -> owner.getServer().getScheduler().runTask(owner, command);
@@ -97,24 +112,33 @@ public class FunctionsWrapper {
     }
 
     public CompletableFuture<FunctionReload.Result> reloadAll() {
-        return a(resourceManager);
+        Reflections reflections;
+        try {
+            reflections = new Reflections();
+
+        } catch (ReflectiveOperationException e) {
+            e.printStackTrace();
+            return CompletableFuture.failedFuture(e);
+        }
+
+        return this.a(reflections);
     }
 
-    public CompletableFuture<FunctionReload.Result> a(IResourceManager resourceManager) {
+    public CompletableFuture<FunctionReload.Result> a(Reflections ref) {
         FunctionReload result = new FunctionReload();
 
         CompletableFuture<Map<MinecraftKey, List<net.minecraft.tags.TagDataPack.a>>> first = CompletableFuture.supplyAsync(
-                () -> this.f.a(resourceManager),
+                () -> ref.f.a(ref.resourceManager),
                 asyncExecutor
         );
 
         CompletableFuture<Map<MinecraftKey, CompletableFuture<CustomFunction>>> second = CompletableFuture.supplyAsync(
-                () -> resourceManager.b("functions", (key) -> key.a().endsWith(".mcfunction")),
+                () -> ref.resourceManager.b("functions", (key) -> key.a().endsWith(".mcfunction")),
                 asyncExecutor
 
         ).thenCompose((var1x) -> {
             Map<MinecraftKey, CompletableFuture<CustomFunction>> var2 = Maps.newHashMap();
-            CommandListenerWrapper var3 = new CommandListenerWrapper(ICommandListener.a, Vec3D.b, Vec2F.a, null, this.h, "", CommonComponents.a, null, null);
+            CommandListenerWrapper var3 = new CommandListenerWrapper(ICommandListener.a, Vec3D.b, Vec2F.a, null, ref.h, "", CommonComponents.a, null, null);
 
             for (Map.Entry<MinecraftKey, IResource> var5 : var1x.entrySet()) {
                 MinecraftKey var6_ = var5.getKey();
@@ -122,7 +146,7 @@ public class FunctionsWrapper {
                 MinecraftKey var8 = new MinecraftKey(var6_.b(), var7_.substring(c, var7_.length() - d));
                 var2.put(var8, CompletableFuture.supplyAsync(() -> {
                     List<String> var3x = readLines(var5.getValue());
-                    return CustomFunction.a(var8, this.i, var3, var3x);
+                    return CustomFunction.a(var8, ref.i, var3, var3x);
                 }, asyncExecutor));
             }
 
@@ -149,8 +173,9 @@ public class FunctionsWrapper {
                     });
 
                     try {
-                        this.e.set(inst, var2.build());
-                        this.g.set(inst, this.f.a(var0x.getFirst()));
+                        this.eField.set(ref.customFunctionManager, var2.build());
+                        this.gField.set(ref.customFunctionManager, ref.f.a(var0x.getFirst()));
+                        ref.customFunctionData.a(ref.customFunctionManager);  // update 'tick' custom functions
                     } catch (IllegalAccessException e) {
                         e.printStackTrace();
                     }
@@ -161,11 +186,12 @@ public class FunctionsWrapper {
 
     public Set<String> getNamespaces() {
         try {
+            Reflections ref = new Reflections();
             //noinspection unchecked
-            return ((Map<MinecraftKey, CustomFunction>) e.get(inst)).keySet().stream()
+            return ((Map<MinecraftKey, CustomFunction>) eField.get(ref.customFunctionManager)).keySet().stream()
                     .map(MinecraftKey::b)
                     .collect(Collectors.toUnmodifiableSet());
-        } catch (IllegalAccessException ex) {
+        } catch (ReflectiveOperationException ex) {
             return Collections.emptySet();
         }
     }
