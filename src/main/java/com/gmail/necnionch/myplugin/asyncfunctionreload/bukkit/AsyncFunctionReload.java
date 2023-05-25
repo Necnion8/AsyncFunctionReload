@@ -3,6 +3,7 @@ package com.gmail.necnionch.myplugin.asyncfunctionreload.bukkit;
 import com.gmail.necnionch.myplugin.asyncfunctionreload.bukkit.commands.ReloadCommand;
 import net.minecraft.server.v1_15_R1.IReloadableResourceManager;
 import net.minecraft.server.v1_15_R1.MinecraftServer;
+import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.v1_15_R1.CraftServer;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -43,6 +44,7 @@ public final class AsyncFunctionReload extends JavaPlugin {
     @Override
     public void onEnable() {
         Objects.requireNonNull(getCommand("functionsreload")).setExecutor(new ReloadCommand(functionsWrapper));
+        Bukkit.getScheduler().runTaskLater(this, () -> functionsWrapper.reloadAll(r -> {}), 0);
 
     }
 }
